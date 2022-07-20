@@ -14,6 +14,8 @@ var ErrInvalidValidatorSyntax = errors.New("invalid validator syntax")
 
 var typeOfUint64 = reflect.TypeOf(uint64(0))
 
+// TypeIndirect return the value type of the pointer if typ's kind is pointer
+// otherwise return typ directly
 func TypeIndirect(typ reflect.Type) reflect.Type {
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
@@ -21,6 +23,8 @@ func TypeIndirect(typ reflect.Type) reflect.Type {
 	return typ
 }
 
+// ToUint64 convert all integer type to ToUint64,
+// string can also be parsed into uint64
 func ToUint64(args interface{}) (uint64, error) {
 	switch v := args.(type) {
 	case int:
@@ -56,16 +60,91 @@ func ToUint64(args interface{}) (uint64, error) {
 
 var vldPat = regexp.MustCompile(FnRegex)
 
+// ParseAllValidatorName return all validator name and its arguments in s
+// Note that validator name must start with letter
+// example:
+//     "range(1, 2, 3)" => ["range", "1, 2, 3"]
 func ParseAllValidatorName(s string) [][]string {
 	return vldPat.FindAllStringSubmatch(s, -1)
 }
 
-func parseValidatorName(s string) (fn string, args []string) {
-	matches := vldPat.FindStringSubmatch(s)
-	if len(matches) != 2 {
-		return "", nil
+type ArgsInfos struct {
+	Strs []string
+	Ints []uint64
+	Vars []string
+}
+
+//         [,space]                         [,space]
+//         +-----+                  +-----------------------+ +-digit-+
+//         |     |                  |                       | |       |
+//         |     |                  |                       | |       |
+//         +->******** <------------+                     **********  |
+//      +-----* init * ------------digit----------------> * number *<-+
+//      |  +->******** <------------+                     **********
+//      |  |     |                  |
+//      |  |     |                  +---------------quote------------------+
+//      |  |     +------------------------quote-------------------------+  |
+// [A-Z |  |                                                            |  |
+// 0-9_]|  |  [,space]                                                          |  |
+//      |  |                                      [./]                  |  |
+//      |  +-*********              ********** ----------> ********** <-+  |
+//      +--->* label *<-+           * escape * <--slash--- * string *------+
+//           *********  |           **********             **********<-+
+//               |      |                                       |      |
+//               |      |                                       |      |
+//               +------+                                       +------+
+//    					  [A-Z0-9_]                                       [.]
+
+// ParseArguments parse the arguments list into 3 kind of lists - strings, integers and variables
+// Only valid unicode char can be supported
+// All string must quote with '', you can use '/' to escape characters.
+// All variables must all be capital letters or '_'.
+// All arguments should be seperated with ','
+func ParseArguments(s string) (*ArgsInfos, error) {
+	var (
+		i     uint64
+		sb    = strings.Builder{}
+		state = initS
+
+		consts []string
+		strs   []string
+		ints   []uint64
+		err    error
+	)
+
+	for _, r := range s {
+		switch state {
+		case initS:
+			err = handleInitS(&state, r, &i, &sb)
+		case constS:
+			err = handleConstS(&state, r, &sb, &consts)
+		case intS:
+			err = handleIntS(&state, r, &i, &ints)
+		case strS:
+			err = handleStrS(&state, r, &sb, &strs)
+		case escapeS:
+			err = handleEscapeS(&state, r, &sb)
+		}
+
+		if err != nil {
+			return nil, err
+		}
 	}
-	return matches[0], strings.Split(matches[1], ",")
+	// handle the final state so that state can transit to initS
+	switch state {
+	case constS:
+		consts = append(consts, sb.String())
+	case intS:
+		ints = append(ints, i)
+	case strS, escapeS:
+		// unquoted string
+		return nil, ErrInvalidValidatorSyntax
+	}
+	return &ArgsInfos{
+		Strs: strs,
+		Ints: ints,
+		Vars: consts,
+	}, nil
 }
 
 const (
@@ -77,16 +156,9 @@ const (
 )
 
 const escapeRune = '\\'
-const labelRune = '$'
 const quoteRune = '\''
 const sepRune = ','
 const constsSepRune = '_'
-
-type ArgsInfos struct {
-	Strs []string
-	Ints []uint64
-	Vars []string
-}
 
 func handleInitS(state *int, r rune, i *uint64, sb *strings.Builder) error {
 	if unicode.IsDigit(r) {
@@ -155,74 +227,4 @@ func handleEscapeS(state *int, r rune, sb *strings.Builder) error {
 		return nil
 	}
 	return ErrInvalidValidatorSyntax
-}
-
-//         [,space]                         [,space]
-//         +-----+                  +-----------------------+ +-digit-+
-//         |     |                  |                       | |       |
-//         |     |                  |                       | |       |
-//         +->******** <------------+                     **********  |
-//      +-----* init * ------------digit----------------> * number *<-+
-//      |  +->******** <------------+                     **********
-//      |  |     |                  |
-//      |  |     |                  +---------------quote------------------+
-//      |  |     +------------------------quote-------------------------+  |
-// [A-Z |  |                                                            |  |
-// 0-9_]|  |  [,space]                                                          |  |
-//      |  |                                      [./]                  |  |
-//      |  +-*********              ********** ----------> ********** <-+  |
-//      +--->* label *<-+           * escape * <--slash--- * string *------+
-//           *********  |           **********             **********<-+
-//               |      |                                       |      |
-//               |      |                                       |      |
-//               +------+                                       +------+
-//    					  [A-Z0-9_]                                       [.]
-
-// parseArguments parse the arguments list into 3 kind of lists - strings,
-// integers and variables
-//
-func ParseArguments(s string) (*ArgsInfos, error) {
-	var (
-		i     uint64
-		sb    = strings.Builder{}
-		state = initS
-
-		consts []string
-		strs   []string
-		ints   []uint64
-		err    error
-	)
-
-	for _, r := range s {
-		switch state {
-		case initS:
-			err = handleInitS(&state, r, &i, &sb)
-		case constS:
-			err = handleConstS(&state, r, &sb, &consts)
-		case intS:
-			err = handleIntS(&state, r, &i, &ints)
-		case strS:
-			err = handleStrS(&state, r, &sb, &strs)
-		case escapeS:
-			err = handleEscapeS(&state, r, &sb)
-		}
-
-		if err != nil {
-			return nil, err
-		}
-	}
-	switch state {
-	case constS:
-		consts = append(consts, sb.String())
-	case intS:
-		ints = append(ints, i)
-	case strS, escapeS:
-		// unquote string
-		return nil, ErrInvalidValidatorSyntax
-	}
-	return &ArgsInfos{
-		Strs: strs,
-		Ints: ints,
-		Vars: consts,
-	}, nil
 }

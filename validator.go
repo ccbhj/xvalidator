@@ -28,6 +28,9 @@ func dummyValidator(interface{}) error {
 	return nil
 }
 
+// And concat two Validator into a new Validator
+// Validator v will be executed first, if it return a not-nil error, return
+// immediately, otherwise execute other.
 func (v Validator) And(other Validator) Validator {
 	if other == nil && v == nil {
 		return dummyValidator
@@ -45,6 +48,8 @@ func (v Validator) And(other Validator) Validator {
 	}
 }
 
+// WithName return a Validator that will fill the field name into ValidatorError
+// if any error occurs
 func (v Validator) WithName(s string) Validator {
 	if v == nil {
 		v = dummyValidator
@@ -61,6 +66,10 @@ func (v Validator) WithName(s string) Validator {
 	}
 }
 
+// NewStructValidator parse the 'xvldt' tag in struct's fields and return a new
+// Validator.
+// All validator can be seperated with ',', and must carry '()' even if the
+// validator need no arguments.
 func NewStructValidator(args interface{}) Validator {
 	val := reflect.Indirect(reflect.ValueOf(args))
 	if val.Kind() != reflect.Struct {
@@ -76,6 +85,7 @@ func NewStructValidator(args interface{}) Validator {
 			vlds[i] = nil
 			continue
 		}
+		// parse all the validator name and arguments
 		var vld Validator
 		for _, match := range internal.ParseAllValidatorName(tag) {
 			fn := strings.TrimSpace(match[1])
@@ -89,7 +99,7 @@ func NewStructValidator(args interface{}) Validator {
 				panic(err)
 			}
 
-			// replace the constants
+			// replace the variable with the registered value
 			for _, v := range arg.Vars {
 				ic, in := registeredConstInt[v]
 				if in {
@@ -143,6 +153,8 @@ func NewStructValidator(args interface{}) Validator {
 	}
 }
 
+// StringRangeValidator return a Validator that check whether a string value in a
+// string list or not
 func StringRangeValidator(arg ValidatorArgs) Validator {
 	v := make(map[string]struct{}, len(arg.Strs))
 	for _, x := range arg.Strs {
@@ -163,6 +175,8 @@ func StringRangeValidator(arg ValidatorArgs) Validator {
 	}
 }
 
+// IntRangeValidator return a Validator that check whether a integer value in a
+// integer list or not. All integer and string can support.
 func IntRangeValidator(arg ValidatorArgs) Validator {
 	v := make(map[uint64]struct{}, len(arg.Ints))
 	for _, x := range arg.Ints {
@@ -183,6 +197,8 @@ func IntRangeValidator(arg ValidatorArgs) Validator {
 	}
 }
 
+// MaxValidator return a Validator that check whether an integer is less than the
+// first arguments of the validator
 func MaxValidator(arg ValidatorArgs) Validator {
 	if len(arg.Ints) < 1 {
 		panic(errors.New("MaxValidator required one integer"))
@@ -202,6 +218,8 @@ func MaxValidator(arg ValidatorArgs) Validator {
 	}
 }
 
+// MaxValidator return a Validator that check whether an integer is larger than the
+// first arguments of the validator
 func MinValidator(arg ValidatorArgs) Validator {
 	if len(arg.Ints) < 1 {
 		panic(errors.New("MaxValidator required one integer"))
@@ -221,6 +239,7 @@ func MinValidator(arg ValidatorArgs) Validator {
 	}
 }
 
+// EmptyValidator return a Validator that check whether a string is not empty
 func NotEmptyValidator(_ ValidatorArgs) Validator {
 	return func(arg interface{}) error {
 		s, ok := arg.(string)
@@ -236,6 +255,8 @@ func NotEmptyValidator(_ ValidatorArgs) Validator {
 	}
 }
 
+// RegexMatchValiator return a Validator that check whether a string match the
+// fisrt argument of the validator
 func RegexMatchValiator(v ValidatorArgs) Validator {
 	if v.Typ.Kind() != reflect.String {
 		panic("invalid type for regex validator")
@@ -262,6 +283,8 @@ func RegexMatchValiator(v ValidatorArgs) Validator {
 	}
 }
 
+// LenMatchValiator return a Validator that check whether a string's length is
+// the same as the first argument of the validator
 func LenValidator(v ValidatorArgs) Validator {
 	if v.Typ.Kind() != reflect.String {
 		panic("invalid type for len validator")
@@ -285,6 +308,8 @@ func LenValidator(v ValidatorArgs) Validator {
 	}
 }
 
+// StructValiator return a Validator that check whether a struct pointer of
+// struct value can pass the validation.
 func StructValidator(v ValidatorArgs) Validator {
 	vld, in := registeredStruct[v.Typ]
 	if !in {

@@ -44,7 +44,7 @@ func TestNewStructValidator(t *testing.T) {
 		B          int `xvldt:"max(100)"`
 		unexported int `xvldt:"min(1)"`
 	}
-	RegisteredStruct(TestStruct{})
+	RegisterStruct(TestStruct{})
 	var a = TestStruct{A: 1, B: 99}
 	var b = TestStruct{A: 100, B: 99}
 	var c = TestStruct{A: 1000, B: 99}
@@ -66,9 +66,9 @@ func TestStructValidator(t *testing.T) {
 		J int
 		A A `xvldt:"strct()"`
 	}
-	RegisteredConstInt("MAX_INT", uint64(max))
-	RegisteredStruct(A{})
-	RegisteredStruct(B{})
+	RegisterConstInt("MAX_INT", uint64(max))
+	RegisterStruct(A{})
+	RegisterStruct(B{})
 
 	// B's validation should depend on A
 	var a = A{I: 99, S: "abc"}

@@ -22,38 +22,45 @@ const (
 )
 
 func init() {
-	RegisteredValidator(maxValidatorName, MaxValidator)
-	RegisteredValidator(minValidatorName, MinValidator)
-	RegisteredValidator(iRangeValidatorName, IntRangeValidator)
-	RegisteredValidator(stringRangeValidatorName, StringRangeValidator)
-	RegisteredValidator(structValidatorName, StructValidator)
-	RegisteredValidator(regexValidatorName, RegexMatchValiator)
-	RegisteredValidator(notEmptyValidatorName, NotEmptyValidator)
-	RegisteredValidator(lenValidatorName, LenValidator)
+	RegisterValidator(maxValidatorName, MaxValidator)
+	RegisterValidator(minValidatorName, MinValidator)
+	RegisterValidator(iRangeValidatorName, IntRangeValidator)
+	RegisterValidator(stringRangeValidatorName, StringRangeValidator)
+	RegisterValidator(structValidatorName, StructValidator)
+	RegisterValidator(regexValidatorName, RegexMatchValiator)
+	RegisterValidator(notEmptyValidatorName, NotEmptyValidator)
+	RegisterValidator(lenValidatorName, LenValidator)
 }
 
-func RegisteredConstStr(name, val string) {
+// RegisterConstStr registers a string constant
+// name must start with letter and consist of letters and numbers
+func RegisterConstStr(name, val string) {
 	if !constNamePat.MatchString(name) {
 		panic("invalid constant name")
 	}
 	registeredConstStr[name] = val
 }
 
-func RegisteredConstInt(name string, val uint64) {
+// RegisterConstStr registers an integer constant
+// name must start with letter and consist of letters and numbers
+func RegisterConstInt(name string, val uint64) {
 	if !constNamePat.MatchString(name) {
 		panic("invalid constant name")
 	}
 	registeredConstInt[name] = val
 }
 
-func RegisteredValidator(name string, factory func(args ValidatorArgs) Validator) {
+// RegisterValidator registers a custom validator
+// name must start with letter and consist of letters and numbers
+func RegisterValidator(name string, factory func(args ValidatorArgs) Validator) {
 	if !namePat.MatchString(string(name)) {
 		panic("invalid constant name")
 	}
 	registeredValidator[name] = factory
 }
 
-func RegisteredStruct(strct interface{}) {
+// RegisterStruct generate a validator for a struct pointer or struct value
+func RegisterStruct(strct interface{}) {
 	typ := internal.TypeIndirect(reflect.TypeOf(strct))
 	_, in := registeredStruct[typ]
 	if in {
@@ -62,6 +69,8 @@ func RegisteredStruct(strct interface{}) {
 	registeredStruct[typ] = NewStructValidator(strct)
 }
 
+// ValidateStruct validates a struct pointer of struct value
+// The struct must be registed before ValidateStruct is called
 func ValidateStruct(strct interface{}) error {
 	typ := internal.TypeIndirect(reflect.TypeOf(strct))
 	vld, in := registeredStruct[typ]
